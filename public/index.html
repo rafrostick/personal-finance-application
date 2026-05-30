@@ -310,6 +310,23 @@ async function checkBackend() {
   try {
     const r = await fetch(`${BACKEND}/api/linked_accounts`, {signal:AbortSignal.timeout(2000)});
     state.backendOnline = r.ok;
+    if (r.ok) {
+      // Restore linked bank list from server so page refreshes don't forget connected banks
+      const itemsRes = await fetch(`${BACKEND}/api/linked_items`, {signal:AbortSignal.timeout(2000)});
+      if (itemsRes.ok) {
+        const { items } = await itemsRes.json();
+        if (Array.isArray(items)) {
+          items.forEach(item => {
+            if (!state.plaidLinked.find(p => p.item_id === item.item_id)) {
+              state.plaidLinked.push({
+                item_id: sanitizeText(item.item_id, 200),
+                name: sanitizeText(item.name),
+              });
+            }
+          });
+        }
+      }
+    }
   } catch(e) { state.backendOnline = false; }
 }
 
@@ -381,12 +398,10 @@ async function syncTransactions() {
       .filter(Boolean)
       .slice(0, MAX_TRANSACTIONS);
 
+    // Replace all Plaid transactions with the fresh fetch — never accumulate
+    // This prevents doubling when re-linking or re-syncing the same bank
     const manual = state.transactions.filter(t => !t.plaid);
-    const seen = new Set();
-    const merged = [...validated, ...manual].filter(t => {
-      if (seen.has(t.id)) return false;
-      seen.add(t.id); return true;
-    });
+    const merged = [...validated, ...manual];
     merged.sort((a,b) => b.date.localeCompare(a.date));
     state.transactions = merged.slice(0, MAX_TRANSACTIONS);
     toast(`Synced ${validated.length} transactions`);
@@ -474,6 +489,7 @@ function render() {
   if (state.modals.addAccount) app.appendChild(makeModal('addAccount'));
   if (state.modals.editBudget) app.appendChild(makeModal('editBudget'));
   if (state.modals.contributeGoal) app.appendChild(makeModal('contributeGoal'));
+  if (state.modals.editTag) app.appendChild(makeModal('editTag'));
   setTimeout(initCharts, 50);
 }
 
@@ -780,7 +796,14 @@ function makeTransactions() {
       tr.appendChild(el('td',{style:'color:var(--ink2)'},txt(t.account)));
       tr.appendChild(el('td',{style:`text-align:right;font-weight:500;color:${t.type==='income'?'var(--green)':'var(--red)'}`},
         txt((t.type==='income'?'+':'-')+fmt(t.amount))));
-      const tdDel = el('td');
+      const tdDel = el('td',{style:'white-space:nowrap;display:flex;gap:4px;padding:8px 12px'});
+      const editTagBtn = el('button',{
+        class:'btn btn-sm',
+        'aria-label':`Edit tag for: ${t.desc}`,
+        onclick:()=>{ state.modals.editTag = t.desc; render(); }
+      });
+      html(editTagBtn,`<i class="ti ti-tag" aria-hidden="true"></i>`);
+      tdDel.appendChild(editTagBtn);
       if (!t.plaid) {
         const delBtn = el('button',{
           class:'btn btn-sm btn-danger',
@@ -996,6 +1019,7 @@ function makeModal(type) {
   if (type==='addAccount') return makeAddAccountModal();
   if (type==='editBudget') return makeEditBudgetModal();
   if (type==='contributeGoal') return makeContributeModal();
+  if (type==='editTag') return makeEditTagModal();
   return el('div');
 }
 
@@ -1227,6 +1251,47 @@ function makeContributeModal() {
     goal.saved = Math.min(goal.target, Math.round((goal.saved + amt)*100)/100);
     saveState(); close();
   }},txt('Add contribution'));
+  modal.appendChild(saveBtn);
+  return overlay;
+}
+
+
+function makeEditTagModal() {
+  const desc = state.modals.editTag;
+  const close = () => { state.modals.editTag = null; render(); };
+  const matching = state.transactions.filter(t => t.desc === desc);
+  const currentCat = matching[0]?.cat || '';
+  const currentType = matching[0]?.type || 'expense';
+  const {overlay, modal} = makeModalShell('Edit tag', close);
+
+  // Info line showing how many will be updated
+  const info = el('div',{style:'font-size:13px;color:var(--ink3);margin-bottom:16px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm)'});
+  info.appendChild(el('strong',{},txt(sanitizeText(desc))));
+  info.appendChild(txt(` · ${matching.length} transaction${matching.length!==1?'s':''} will be updated`));
+  modal.appendChild(info);
+
+  const catGrp = el('div',{class:'form-group'});
+  catGrp.appendChild(el('label',{class:'form-label',for:'et-cat'},txt('Category')));
+  const catEl = el('select',{class:'form-select',id:'et-cat'});
+  const cats = currentType === 'income' ? INCOME_CATS : EXPENSE_CATS;
+  cats.forEach(c => {
+    const opt = el('option',{value:c},txt(c));
+    if (c === currentCat) opt.setAttribute('selected','selected');
+    catEl.appendChild(opt);
+  });
+  catGrp.appendChild(catEl);
+  modal.appendChild(catGrp);
+
+  const saveBtn = el('button',{class:'btn btn-primary',style:'width:100%;margin-top:4px',onclick:()=>{
+    const newCat = sanitizeEnum(catEl.value, ALL_CATS);
+    if (!newCat) { toast('Select a valid category'); return; }
+    state.transactions = state.transactions.map(t =>
+      t.desc === desc ? {...t, cat: newCat} : t
+    );
+    saveState();
+    toast(`Updated ${matching.length} transaction${matching.length!==1?'s':''}`);
+    close();
+  }},txt('Save'));
   modal.appendChild(saveBtn);
   return overlay;
 }
