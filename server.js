@@ -17,7 +17,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'", "https://cdn.plaid.com", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
-      scriptSrc:  ["'self'", "'unsafe-inline'", "https://cdn.plaid.com", "https://cdnjs.cloudflare.com"],
+      scriptSrc:  ["'self'", "https://cdn.plaid.com", "https://cdnjs.cloudflare.com"],
       styleSrc:   ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc:    ["https://fonts.gstatic.com"],
       connectSrc: ["'self'", "https://localhost:3001", "https://127.0.0.1:3001", "https://api.anthropic.com", "https://*.plaid.com"],
