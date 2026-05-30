@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.plaid.com https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdn.plaid.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src http://localhost:3001 http://127.0.0.1:3001 https://api.anthropic.com https://*.plaid.com; frame-src https://*.plaid.com; img-src 'self' https://*.plaid.com data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.plaid.com https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdn.plaid.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://localhost:3001 https://127.0.0.1:3001 https://api.anthropic.com https://*.plaid.com; frame-src https://*.plaid.com; img-src 'self' https://*.plaid.com data:;">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -116,7 +116,7 @@ tr:hover td{background:var(--surface2)}
 <script>
 'use strict';
 
-const BACKEND = 'http://localhost:3001';
+const BACKEND = 'https://localhost:3001';
 
 // ── Constants (immutable, no injection surface) ───────────────────────────
 const VALID_PAGES = Object.freeze(['dashboard','transactions','budget','goals','accounts']);
@@ -278,7 +278,6 @@ async function loadState() {
         .map(p => ({ item_id: sanitizeText(p.item_id, 200), name: sanitizeText(p.name) }));
     }
   } catch(e) { console.warn('State load failed, starting fresh:', e); }
-  if (!state.transactions.length) seedDemo();
   await checkBackend();
   render();
 }
@@ -305,35 +304,6 @@ function toast(msg, duration = 3000) {
   el._timer = setTimeout(() => el.classList.remove('show'), duration);
 }
 
-// ── Demo seed ─────────────────────────────────────────────────────────────
-function seedDemo() {
-  const now = new Date(), m = now.getMonth(), y = now.getFullYear();
-  const ds = d => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-  state.transactions = [
-    {id:'t1',date:ds(1),desc:'Monthly salary',amount:5500,type:'income',cat:'Salary',account:'Demo',plaid:false},
-    {id:'t2',date:ds(3),desc:'Rent',amount:1800,type:'expense',cat:'Housing',account:'Demo',plaid:false},
-    {id:'t3',date:ds(5),desc:'Grocery store',amount:134,type:'expense',cat:'Food',account:'Demo',plaid:false},
-    {id:'t4',date:ds(7),desc:'Streaming services',amount:28,type:'expense',cat:'Entertainment',account:'Demo',plaid:false},
-    {id:'t5',date:ds(10),desc:'Freelance project',amount:900,type:'income',cat:'Freelance',account:'Demo',plaid:false},
-    {id:'t6',date:ds(12),desc:'Gas and transit',amount:88,type:'expense',cat:'Transport',account:'Demo',plaid:false},
-    {id:'t7',date:ds(14),desc:'Restaurant',amount:74,type:'expense',cat:'Food',account:'Demo',plaid:false},
-    {id:'t8',date:ds(16),desc:'Electric bill',amount:95,type:'expense',cat:'Utilities',account:'Demo',plaid:false},
-    {id:'t9',date:ds(18),desc:'Online course',amount:49,type:'expense',cat:'Education',account:'Demo',plaid:false},
-    {id:'t10',date:ds(20),desc:'Pharmacy',amount:38,type:'expense',cat:'Healthcare',account:'Demo',plaid:false},
-  ];
-  state.accounts = [
-    {id:'a1',name:'Checking',type:'Bank',balance:8240,plaid:false},
-    {id:'a2',name:'Savings',type:'Bank',balance:22500,plaid:false},
-    {id:'a3',name:'Credit Card',type:'Credit',balance:-2100,plaid:false},
-    {id:'a4',name:'401k',type:'Investment',balance:41000,plaid:false},
-  ];
-  state.goals = [
-    {id:'g1',name:'Emergency Fund',target:15000,saved:8500,deadline:'2025-12-31',icon:'ti-shield-check',color:'#10b981'},
-    {id:'g2',name:'Vacation to Japan',target:5000,saved:1200,deadline:'2025-08-01',icon:'ti-plane',color:'#5b4de8'},
-    {id:'g3',name:'New Car',target:25000,saved:7800,deadline:'2026-06-01',icon:'ti-car',color:'#f59e0b'},
-  ];
-  state.budget = {Housing:2000,Food:500,Transport:200,Healthcare:150,Entertainment:150,Shopping:300,Utilities:150};
-}
 
 // ── Backend / Plaid ────────────────────────────────────────────────────────
 async function checkBackend() {

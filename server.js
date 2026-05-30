@@ -1,15 +1,32 @@
 // Get There — Plaid backend
 // Run: node server.js
-// Requires: npm install express cors dotenv plaid
+// Requires: npm install express cors dotenv plaid helmet express-rate-limit
 
 require("dotenv").config();
+const https = require("https");
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const { rateLimit } = require("express-rate-limit");
 const { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } = require("plaid");
 
 const app = express();
-app.use(cors({ origin: "*" }));
-app.use(express.json());
+// Security headers
+app.use(helmet());
+
+// CORS: localhost only
+app.use(cors({ origin: 'https://localhost:3001', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type'] }));
+
+app.use(express.json({ limit: '10kb' }));
+app.use(express.static(__dirname + '/public'));
+
+// Rate limiting — 60 requests/minute per IP
+const limiter = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many requests — please wait.' } });
+app.use(limiter);
+
+// Tighter limit on token exchange
+const exchangeLimiter = rateLimit({ windowMs: 60_000, max: 10, message: { error: 'Too many token exchanges — please wait.' } });
 
 // ── Plaid client ──────────────────────────────────────────────────────────────
 const plaidConfig = new Configuration({
@@ -44,7 +61,7 @@ app.post("/api/create_link_token", async (req, res) => {
 });
 
 // ── 2. Exchange public_token → access_token ───────────────────────────────────
-app.post("/api/exchange_token", async (req, res) => {
+app.post("/api/exchange_token", exchangeLimiter, async (req, res) => {
   try {
     const { public_token, institution_name } = req.body;
     const response = await plaidClient.itemPublicTokenExchange({ public_token });
@@ -172,8 +189,12 @@ function mapAccountType(plaidType) {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`\n✅ Get There backend running at http://localhost:${PORT}`);
+const httpsOptions = {
+  key: fs.readFileSync('./localhost+1-key.pem'),
+  cert: fs.readFileSync('./localhost+1.pem'),
+};
+https.createServer(httpsOptions, app).listen(PORT, "127.0.0.1", () => {
+  console.log(`\n✅ Get There backend running at https://localhost:${PORT}`);
   console.log(`   Environment: ${process.env.PLAID_ENV || "sandbox"}`);
   if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
     console.warn("\n⚠️  PLAID_CLIENT_ID or PLAID_SECRET not set — check your .env file!\n");
